@@ -13,6 +13,7 @@ Number.prototype.pad = function(size) {
 
 class Sanki {
     constructor(){
+        this.baseFolder = 'manga';
     }
 
     async init(){
@@ -57,47 +58,72 @@ class Sanki {
         encodeParams[3] = eval(encodeParams[3])
         encodeParams[4] = parseInt(encodeParams[4])
         encodeParams[5] = {}
-        let result = decodeMHG(encodeParams[0], encodeParams[1], encodeParams[2], encodeParams[3], encodeParams[4], encodeParams[5])
-        return result
+        let raw = JSON.parse(decodeMHG(encodeParams[0], encodeParams[1], encodeParams[2], encodeParams[3], encodeParams[4], encodeParams[5]))
+        let json = {
+            name: raw.bname,
+            totalPages: raw.len,
+            chapter: raw.cname, 
+            cover: raw.bpic,
+            imgs: {
+                path: raw.path,
+                files: raw.files,
+                md5: raw.sl.md5,
+                cid: raw.cid,
+            },
+            progress: {
+                downloadedPages: 0,
+                missingPages: [],
+            },
+        }
+        return json 
     }
-    async downloadChapter(chapterUrl){
-        const status = await this.page.open('https://tw.manhuagui.com/comic/5060/249045.html');
-        logger.info('chapter opened')
-
-        const html = await this.page.property('content');
-        logger.info('content opened')
-        let chapter = await this.parseChapter(html);
-        logger.info('chapter info parsed')
-        let img = chapter.dev.imgSrc.match(/^(https:\/\/.*\/)(\d{3}\.jpg)(.*$)/)
+    downloadImage(chapter){
+        let imgs = chapter.imgs
+        let baseUrl = 'https://i.hamreus.com'
+        let baseFolder = this.baseFolder
         let promises = [];
-        for(let i = 0; i < chapter.data.totalPages; i++){
-            let pageNum = i.pad(3);
-            let path = img[1] + pageNum + ".jpg" + img[3];
+        for(let i = 0; i < imgs.files.length; i++){
+            let path = `${baseUrl}${imgs.path}${imgs.files[i]}?cid=${imgs.cid}&md5=${imgs.md5}`
             promises.push(rp({
                 url: path,
-                encoding: null,
+                encoding: null, // binary mode
                 headers: {
-                    'Referer': 'https://tw.manhuagui.com',
+                    'Referer': 'https://tw.manhuagui.com', // fake referer
                 }
             }).then(function(content){
-                fs.writeFile("damn/" + pageNum + ".jpg", content, function(err) {
+                if(!fs.existsSync(`${baseFolder}/${chapter.name}`)){
+                   fs.mkdirSync(`${baseFolder}/${chapter.name}`) 
+                }
+                if(!fs.existsSync(`${baseFolder}/${chapter.name}/${chapter.chapter}`)){
+                   fs.mkdirSync(`${baseFolder}/${chapter.name}/${chapter.chapter}`) 
+                }
+                fs.writeFile(`${baseFolder}/${chapter.name}/${chapter.chapter}/${i}.jpg`, content, function(err) {
                     if(err){
-                        chapter.data.missingPages += pageNum
-                        console.log(err)
+                        chapter.progress.missingPages += i
+                        logger.error('image IO error', err)
                     }
-                    chapter.data.downloadedPages += 1
+                    chapter.progress.downloadedPages += 1
+                    logger.info(`${i} downloaded`)
                 })
             }).catch(function(err){
-                chapter.data.missingPages += pageNum
+                chapter.progress.missingPages += i
+                logger.error('can not fetch the image', err)
             }))
         }
         Promise.all(promises).then(function(result){
-            console.log(manga);
+            console.log("done");
         })
+    }
+    async downloadChapter(chapterUrl){
+        const html = await rp('https://tw.manhuagui.com/comic/5060/249045.html');
+        logger.info('html fetched')
+        let chapter = await this.parseChapter(html);
+        logger.info('chapter info parsed')
+        this.downloadImage(chapter)
     }
 };
 
 (async function(){
     const sanki = new Sanki();
-    await sanki.test()
+    await sanki.downloadChapter()
 })()

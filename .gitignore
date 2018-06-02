@@ -65,3 +65,7 @@ typings/
 
 # Serverless directories
 .serverless
+
+# custom
+manga/*
+!manga/.gitkeep
