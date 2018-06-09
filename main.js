@@ -6,6 +6,7 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const inquirer = require('inquirer');
 
+logger.level = "debug"
 Number.prototype.pad = function(size) {
     var s = String(this);
     while (s.length < (size || 2)) {s = "0" + s;}
@@ -38,6 +39,7 @@ class Sanki {
         encodeParams[4] = parseInt(encodeParams[4])
         encodeParams[5] = {}
         let raw = JSON.parse(decodeMHG(...encodeParams))
+        logger.debug('raw json', raw)
         let json = {
             name: raw.bname,
             totalPages: raw.len,
@@ -65,7 +67,8 @@ class Sanki {
         let tasks = [];
         for(let i = 0; i < chapter.imgs.files.length; i++){
             tasks.push(() => {
-                let path = `${baseUrl}${imgs.path}${imgs.files[i]}?cid=${imgs.cid}&md5=${imgs.md5}`
+                let path = baseUrl + encodeURI(`${imgs.path}${imgs.files[i]}?cid=${imgs.cid}&md5=${imgs.md5}`);
+                logger.debug('path ', path);
                 return new Promise((resolve, reject) => {
                     rp({
                         url: path,
@@ -93,7 +96,7 @@ class Sanki {
                     })
                     .catch(function(err){
                         chapter.progress.missingPages += i
-                        logger.error('can not fetch the image', err)
+                        logger.error('can not fetch the image', path)
                         reject()
                     })
                 })
@@ -101,18 +104,17 @@ class Sanki {
         }
         return tasks;
     }
-    startDownloadTasks(tasks){
-        Promise.all(tasks.map(task => task())).then(function(result){
-            logger.info("finished")
-        })
-    }
+
     async downloadChapter(chapterUrl){
-        logger.info('Parsing chapter HTML')
+        logger.debug('Parsing chapter HTML')
         let chapterMeta = await this.parseChapter(chapterUrl);
-        logger.info('Preparing download tasks')
+        logger.debug('Parsed', chapterMeta)
+        logger.debug('Preparing download tasks')
         let tasks = await this.prepareDownloadTasks(chapterMeta)
-        logger.info('Start downloading')
-        this.startDownloadTasks(tasks)
+        logger.debug('Start downloading')
+        Promise.all(tasks.map(task => task())).then(function(result){
+            logger.info(`${chapterMeta.chapter} downloaded`)
+        })
     }
 };
 
@@ -126,19 +128,25 @@ class Sanki {
         }
     ]).then(async function(answers){
         const chapters = await sanki.getChapterUrls(answers.mangaPath);
-        inquirer.prompt([{
+        inquirer.prompt({
             type: 'checkbox',
             name: 'chapters',
             message: 'Which chapter(s) you want to download?',
-            choices: chapters.map(function(chapter){
-                return {
-                    name: chapter.name,
-                    value: 'https://tw.manhuagui.com' + chapter.path //fix
-                }
-            })
-
-        }]).then(function(answers){
-            answers.chapters.map(function(selectedChapterUrl){
+            choices: [
+                {
+                    name: 'All',
+                    value: 'all',
+                },
+                ...chapters.map(function(chapter){
+                    return {
+                        name: chapter.name,
+                        value: 'https://tw.manhuagui.com' + chapter.path //fix
+                    }
+                })
+            ]
+        }).then(function(answers){
+            let selectedChaptersUrl = (answers.chapters == 'all') ? chapters.map(chapter => 'https://tw.manhuagui.com' + chapter.path) : answers.chapters;
+            selectedChaptersUrl.map(selectedChapterUrl => {
                 sanki.downloadChapter(selectedChapterUrl)
             })
         })
