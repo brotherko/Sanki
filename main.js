@@ -1,6 +1,6 @@
 const logger = require('winston');
 const phantom = require('phantom');
-const decodeMHG = require('./decodeMHG');
+const decodeMHG = require('./platform/manhuagui/decodeMHG');
 const rp = require('request-promise');
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
