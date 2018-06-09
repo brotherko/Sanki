@@ -32,6 +32,7 @@ class Sanki {
     async parseChapter(chapterUrl){
         const html = await rp(chapterUrl).catch((err) => logger.error(err));
         let encodeParams = html.match(/\('.*\..*\((.*)\)\..*\(\);',(.*),(.*),(.*),(.*),(.*)\)\) \<\/script\>/);
+        logger.debug('encoded params', encodeParams)
         encodeParams = encodeParams.slice(1)
         encodeParams[1] = parseInt(encodeParams[1])
         encodeParams[2] = parseInt(encodeParams[2])
@@ -90,14 +91,14 @@ class Sanki {
                                 logger.error('image IO error', err)
                             }
                             chapter.progress.downloadedPages += 1
-                            logger.info(`page ${i} downloaded`)
+                            logger.debug(`page ${i} downloaded`)
                             return resolve(i)
                         })
                     })
                     .catch(function(err){
                         chapter.progress.missingPages += i
                         logger.error('can not fetch the image', path)
-                        reject()
+                        reject(i)
                     })
                 })
             })
@@ -113,7 +114,7 @@ class Sanki {
         let tasks = await this.prepareDownloadTasks(chapterMeta)
         logger.debug('Start downloading')
         Promise.all(tasks.map(task => task())).then(function(result){
-            logger.info(`${chapterMeta.chapter} downloaded`)
+            logger.info(`${chapterMeta.cname} ${chapterMeta.chapter} downloaded`)
         })
     }
 };
@@ -124,7 +125,7 @@ class Sanki {
         {
             type: 'input',
             name: 'mangaPath',
-            message: "What is the path of the manga"
+            message: "Path of the Manga from tw.manhuagui.com"
         }
     ]).then(async function(answers){
         const chapters = await sanki.getChapterUrls(answers.mangaPath);
