@@ -5,6 +5,7 @@ const rp = require('request-promise');
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const inquirer = require('inquirer');
+const sharp = require('sharp');
 
 logger.level = "debug"
 Number.prototype.pad = function(size) {
@@ -73,7 +74,7 @@ class Sanki {
                 return new Promise((resolve, reject) => {
                     rp({
                         url: path,
-                        encoding: null, // binary mode
+                        encoding: null,// binary mode
                         headers: {
                             'Referer': 'https://tw.manhuagui.com', // fake referer
                         }
@@ -85,14 +86,13 @@ class Sanki {
                         if(!fs.existsSync(chapterFolder)){
                             fs.mkdirSync(chapterFolder) 
                         }
-                        fs.writeFile(`${chapterFolder}/${i}.jpg`, content, function(err) {
-                            if(err){
-                                chapter.progress.missingPages += i
-                                logger.error('image IO error', err)
-                            }
+                        sharp(content).toFile(`${chapterFolder}/${i}.jpg`).then(() => {
                             chapter.progress.downloadedPages += 1
-                            logger.debug(`page ${i} downloaded`)
+                            logger.debug(`page ${i} downloaded`);
                             return resolve(i)
+                        }).catch(err => {
+                            chapter.progress.missingPages += i;
+                            logger.error('image IO error', err)
                         })
                     })
                     .catch(function(err){
@@ -147,8 +147,8 @@ class Sanki {
             ]
         }).then(function(answers){
             let selectedChaptersUrl = (answers.chapters == 'all') ? chapters.map(chapter => 'https://tw.manhuagui.com' + chapter.path) : answers.chapters;
-            selectedChaptersUrl.map(selectedChapterUrl => {
-                sanki.downloadChapter(selectedChapterUrl)
+            selectedChaptersUrl.map(async function(selectedChapterUrl){
+                await sanki.downloadChapter(selectedChapterUrl)
             })
         })
     })
